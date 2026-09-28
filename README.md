@@ -147,11 +147,24 @@ python scripts/verify_schema.py
 
 Expected output: 26 tables (25 domain tables + `alembic_version`; see `N1_GATE_VERIFICATION.md` clarification), pgcrypto, 4 audit_log indexes, grants for `mark_app_role`.
 
+Role split (verification finding 2026-09-28): the app runtime connects as the
+least-privilege `mark_api` login (member of `mark_app_role`); migrations run
+as the `mark_app` owner. `.env.example` encodes this as `DATABASE_URL` (app)
+vs `OWNER_DATABASE_URL` (migrations) — never point migrations at the app URL.
+The default `mark_api` password lives in three places that must change
+together: `.env.example`, `scripts/init-db.sql`, migration `004`.
+
 ### 3.6 Run verification tests (gate tests)
 
 ```bash
 pytest tests -v
-# All 14 tests must pass. See Section 5 for what each gate asserts.
+# Full suite (N1+N2) must pass with no skips. See Section 5 for what each gate asserts.
+```
+
+N1 subset only (14 tests — use this when the claim under review is N1):
+
+```bash
+pytest tests/test_n1_*.py -v
 ```
 
 Windows PowerShell (no activation required):
@@ -164,21 +177,28 @@ Windows PowerShell (no activation required):
 
 ### 3.7 Run the Local API (health skeleton)
 
+`python -m app.serve` is the ONLY supported launcher. It validates the bind
+host before starting uvicorn. Raw `uvicorn app.main:app` is forbidden — it
+imports the app without ever running the guard (verification finding
+2026-09-28).
+
 ```bash
 # Localhost-only (default, N1 gate):
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m app.serve --host 127.0.0.1 --port 8000
 curl http://127.0.0.1:8000/api/v1/health
 # -> {"status":"ok","db":"ok","service":"agent-mark-node"}
 
 # LAN mode (school network, e.g. 192.168.1.50):
-API_HOST=192.168.1.50 uvicorn app.main:app --host 192.168.1.50 --port 8000
-# or: API_HOST=0.0.0.0 uvicorn ...  (binds all local interfaces; still LAN-only
-#      when the host firewall/NAT does not forward the port to the internet)
+python -m app.serve --host 192.168.1.50 --port 8000
+# (binds that interface; still LAN-only only when the host firewall/NAT does
+#  not forward the port to the internet)
 ```
 
-The API **refuses** to start if `API_HOST` is a public-routable IP and
-`ALLOW_PUBLIC_BIND=false` (default). This is the code-level safety net for the
-"LAN only, never public internet" constraint (Node Architecture Section 3).
+The launcher **refuses** to start on a public-routable IP while
+`ALLOW_PUBLIC_BIND=false` (default). That guard is a code-level safety net,
+not the enforcement: the real network control is the host firewall/NAT never
+forwarding the port beyond the LAN (Node Architecture Section 3). The manual
+proof in 3.8 stays mandatory.
 
 ### 3.8 Verify LAN-only binding (manual gate step)
 

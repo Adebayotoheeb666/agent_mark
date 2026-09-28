@@ -17,8 +17,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Allow DATABASE_URL override via env
-db_url = os.getenv("DATABASE_URL")
+# Migrations run as the mark_app OWNER (least-privilege mark_api cannot DDL).
+# Explicit override only; never fall back to the app's DATABASE_URL, which now
+# points at mark_api and would fail (and must fail) on migration statements.
+db_url = os.getenv("OWNER_DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 

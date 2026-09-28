@@ -3,10 +3,19 @@ services:
     image: postgres:17-alpine
     container_name: agent_mark_db
     restart: unless-stopped
+    # School-hardware proxy (verification finding 2026-09-28): N2 performance
+    # results on an unconstrained DB are meaningless. Still not real hardware,
+    # but far closer than defaults.
+    cpus: 1
+    mem_limit: 1g
     environment:
       POSTGRES_USER: mark_app
       POSTGRES_PASSWORD: mark_app_password
       POSTGRES_DB: agent_mark
+      # NOTE: the least-privilege app login (mark_api) password lives as a
+      # literal in scripts/init-db.sql + migration 004 and in .env.example's
+      # DATABASE_URL (default mark_api_password). psql -f takes no variables,
+      # so there is no compose env var for it — change all three together.
     ports:
       - "5432:5432"
     volumes:

@@ -1,6 +1,10 @@
 """N1 Test: Local API binding and LAN-only constraint."""
 
 import socket
+import subprocess
+import sys
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.main import app, validate_bind_host
@@ -45,16 +49,21 @@ def test_api_bound_to_localhost_by_default():
     assert settings.api_host in ("127.0.0.1", "0.0.0.0", "localhost") or settings.api_host.startswith("192.168.") or settings.api_host.startswith("10.")
 
 
-def test_api_not_reachable_from_outside_lan_note():
-    """Documents the LAN-only guarantee.
+def test_launcher_refuses_public_bind():
+    """The supported launcher (python -m app.serve) must refuse a public IP.
 
-    A fully automated 'outside LAN' test requires two network segments.
-    Here we verify the binding configuration and document the manual step.
-    The runbook (README) instructs the tester to run:
-      curl -v http://<node-lan-ip>:8000/api/v1/health   # from same LAN -> 200
-      curl --connect-timeout 3 http://<public-ip>:8000/api/v1/health  # from internet -> timeout/refused
-    This test asserts the config enforces the distinction.
+    Runs the documented command as a subprocess and asserts the guard's OWN
+    error text — a bare nonzero exit would pass for the wrong reason (e.g. an
+    import error). The guard raises before uvicorn starts, so nothing binds.
+    The manual same-LAN curl proof stays in the runbook (README Section 3.8).
     """
-    # App must NOT be configured to listen on 0.0.0.0 with public exposure;
-    # the validate_bind_host guard ensures a public IP cannot be used accidentally.
-    assert not settings.allow_public_bind, "ALLOW_PUBLIC_BIND must be false in N1 default config"
+    repo_root = Path(__file__).resolve().parents[1]
+    proc = subprocess.run(
+        [sys.executable, "-m", "app.serve", "--host", "8.8.8.8"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=repo_root,
+    )
+    assert proc.returncode == 2, f"launcher must exit 2 on public bind, got {proc.returncode}: {proc.stderr}"
+    assert "Refusing to bind" in proc.stderr, f"expected the guard's error, got: {proc.stderr}"
