@@ -59,7 +59,7 @@ Out of scope for N1 (intentionally stubbed): LMS connectors (N3), validation/ano
 │   ├── test_n2_devices.py              # Enrollment, revocation, revoked rejection
 │   └── test_n2_performance.py          # Full-school dataset and query budgets
 ├── scripts/
-│   ├── init-db.sql             # Docker init: creates mark_app_role
+│   ├── init-db.sh              # Docker init: roles from env (LF endings required)
 │   ├── verify_schema.py        # CLI smoke check
 │   ├── n2_bootstrap.py         # Trusted local first-admin/device bootstrap
 │   └── seed_n2_school.py       # Realistic full-school N2 fixture seeder
@@ -151,8 +151,11 @@ Role split (verification finding 2026-09-28): the app runtime connects as the
 least-privilege `mark_api` login (member of `mark_app_role`); migrations run
 as the `mark_app` owner. `.env.example` encodes this as `DATABASE_URL` (app)
 vs `OWNER_DATABASE_URL` (migrations) — never point migrations at the app URL.
-The default `mark_api` password lives in three places that must change
-together: `.env.example`, `scripts/init-db.sql`, migration `004`.
+Per-install credential: generate `MARK_API_PASSWORD` once in `.env` and keep
+the password inside `DATABASE_URL` identical — `.env` is the single source
+that the app, `docker-entrypoint` (`scripts/init-db.sh`), and migration `004`
+all read. The DB port publishes loopback-only (`127.0.0.1:5432`); confirm
+with `ss -tlnp | grep 5432` on the node.
 
 ### 3.6 Run verification tests (gate tests)
 
@@ -161,10 +164,11 @@ pytest tests -v
 # Full suite (N1+N2) must pass with no skips. See Section 5 for what each gate asserts.
 ```
 
-N1 subset only (14 tests — use this when the claim under review is N1):
+N1 subset only (15 tests — use this when the claim under review is N1).
+Explicit file list: PowerShell does not expand `*` globs for pytest.
 
 ```bash
-pytest tests/test_n1_*.py -v
+pytest tests/test_n1_api_binding.py tests/test_n1_audit_immutability.py tests/test_n1_schema.py -v
 ```
 
 Windows PowerShell (no activation required):
@@ -199,6 +203,14 @@ The launcher **refuses** to start on a public-routable IP while
 not the enforcement: the real network control is the host firewall/NAT never
 forwarding the port beyond the LAN (Node Architecture Section 3). The manual
 proof in 3.8 stays mandatory.
+
+Residual risk, recorded (verification finding 2026-09-28): raw
+`uvicorn app.main:app` is forbidden by this runbook, not blocked by code —
+nothing stops an operator typing it and skipping the guard. Accepted because
+the actual controls do not depend on the launcher: Postgres listens on
+loopback only (§3.5), and the firewall/NAT boundary is what keeps traffic
+LAN-local. A `scope["client"]` in-app check would close even this, cheaply;
+deferred unless a gate reviewer asks for it.
 
 ### 3.8 Verify LAN-only binding (manual gate step)
 

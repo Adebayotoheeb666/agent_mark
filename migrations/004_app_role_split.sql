@@ -12,13 +12,22 @@
 -- Assumption: audit_log is created once by 001 and never recreated, so the
 -- lockdown below targets the existing table; future tables pick up CRUD via
 -- the default privileges (needed by N3+).
+-- NOTE (N4/N6 tracked item): grading_policies, guardrail_configurations and
+-- report_templates are append-only-by-version per spec but keep full CRUD for
+-- the app role here. Same layered treatment (grant split + trigger) to follow
+-- when those phases land; not an N1/N2 blocker.
 
+-- Default password comes from MARK_API_PASSWORD in the migration environment
+-- (see versions/004_app_role_split.py), defaulting to 'mark_api_password' for
+-- local dev. Single source: .env holds MARK_API_PASSWORD and DATABASE_URL
+-- together; the migration and docker-entrypoint both consume it. Never store a
+-- real credential here.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mark_api') THEN
-    CREATE ROLE mark_api LOGIN INHERIT PASSWORD 'mark_api_password';
+    CREATE ROLE mark_api LOGIN INHERIT PASSWORD '__MARK_API_PASSWORD__';
   ELSE
-    ALTER ROLE mark_api WITH LOGIN INHERIT PASSWORD 'mark_api_password';
+    ALTER ROLE mark_api WITH LOGIN INHERIT PASSWORD '__MARK_API_PASSWORD__';
   END IF;
 END
 $$;

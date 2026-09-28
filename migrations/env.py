@@ -3,6 +3,12 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Single credential source: .env holds MARK_API_PASSWORD and DATABASE_URL
+# together. Explicit process env wins over the file (override=False).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 

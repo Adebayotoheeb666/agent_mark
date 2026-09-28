@@ -12,16 +12,19 @@ services:
       POSTGRES_USER: mark_app
       POSTGRES_PASSWORD: mark_app_password
       POSTGRES_DB: agent_mark
-      # NOTE: the least-privilege app login (mark_api) password lives as a
-      # literal in scripts/init-db.sql + migration 004 and in .env.example's
-      # DATABASE_URL (default mark_api_password). psql -f takes no variables,
-      # so there is no compose env var for it — change all three together.
+      # App-login password, single-sourced from .env (MARK_API_PASSWORD).
+      # The entrypoint script and migration 004 read this same value.
+      MARK_API_PASSWORD: ${MARK_API_PASSWORD:-mark_api_password}
     ports:
-      - "5432:5432"
+      # Loopback-only (verification finding 2026-09-28): 0.0.0.0:5432 exposed
+      # Postgres — and its superuser default password — to the whole LAN,
+      # bypassing the API guard and the role split. Verify closed with
+      # ss -tlnp | grep 5432 (must show 127.0.0.1) or from a second device.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Seed role + grants on first init (also handled idempotently by migrations)
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mark_app -d agent_mark"]
       interval: 5s

@@ -1,0 +1,2 @@
+# Shell entrypoints must keep LF endings or POSIX sh breaks (heredocs, set -eu).
+*.sh text eol=lf
